@@ -11,9 +11,7 @@ if ($method === 'GET' && $uri === '/health') {
 }
 
 if ($method === 'POST' && $uri === '/api/autopost/ingest') {
-    requireBearer($_ENV['AUTOMATION_TOKEN'] ?? '');
-    $controller = new App\Controllers\IngestController();
-    $controller();
+    \App\Controllers\IngestController::ingest();
     return;
 }
 
