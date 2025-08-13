@@ -1,0 +1,188 @@
+P0 — Core Engine (wajib duluan, 100% diperlukan)
+Tujuan: mesin autopost minimal sudah bisa jalan end‑to‑end ke 1–2 platform (FB Page/IG).
+
+1) Bootstrap Repo & Env
+Task: Inisialisasi repo, struktur folder, config ENV.
+
+Deliverable: /src, /jobs, /public, .env.example, composer.json (atau package.json kalau Node).
+
+Helper: Codex (generate scaffold), DevOps (ENV & sekret).
+
+Prompt Codex: “Create PHP 8.2 microservice skeleton with public/index.php router, jobs/worker.php cron entry, dotenv loader, PSR‑4 autoload.”
+
+2) DB Schema & Migrations
+Task: Buat tabel:
+
+platform_accounts, social_queue, social_posts, webhooks_log.
+
+Deliverable: migrations/001_init.sql.
+
+Helper: Codex (DDL), Backend (review index/constraints).
+
+Prompt Codex: “Write MySQL schema for social_queue (…fields…), optimized indexes for status+publish_at; include social_posts and platform_accounts.”
+
+3) UTM Builder + Model Queue
+Task: Utility pembuat UTM (utm_source, utm_medium, utm_campaign, utm_content), dan model Queue CRUD.
+
+Deliverable: src/services/UTMBuilder.php, src/models/Queue.php.
+
+Helper: Codex (kode), Backend (unit test singkat).
+
+Prompt Codex: “Implement PHP class UTMBuilder::build(baseUrl, platform, metaArray) returning url with preserved query params.”
+
+4) Ingest API (REST)
+Task: Endpoint POST /api/autopost/ingest terima konten, normalisasi → simpan ke social_queue (status ready).
+
+Deliverable: src/controllers/IngestController.php, routing di public/index.php.
+
+Helper: Codex (controller + validation), Backend (auth).
+
+Prompt Codex: “Create PHP controller with Bearer token auth, validate JSON body {title, summary, link, image_url?, data?, channels?, publish_at?}.”
+
+5) Templater Caption (baseline)
+Task: Fungsi render caption per platform (FB/IG/Twitter/Telegram) dari template statis (belum GPT).
+
+Deliverable: src/services/Templater.php.
+
+Helper: Codex (string builder), Growth (review gaya copy).
+
+Prompt Codex: “Build template engine: given data {game, rtp, window, pattern, jam, link}, return platform‑specific caption within length limit.”
+
+6) Connector: Meta Graph (FB Page Photo + Caption)
+Task: Publish ke FB Page: POST /{page-id}/photos (image_url + caption).
+
+Deliverable: src/services/Dispatcher/Facebook.php.
+
+Helper: Codex (HTTP client & error handling), DevOps (token).
+
+Prompt Codex: “Implement PHP class to post photo with caption to Facebook Graph API v18 using page token; handle errors & return post_id.”
+
+7) Worker Cron + Retry
+Task: jobs/worker.php baca queue (status ready & publish_at <= NOW()), render caption+UTM, dispatch, simpan social_posts, retry backoff.
+
+Deliverable: jobs/worker.php, src/services/Dispatcher/index.php.
+
+Helper: Codex (loop + retry), Backend (logic).
+
+Prompt Codex: “Write PHP cron worker: fetch up to 20 jobs, mark posting, dispatch per channel, log success/fail, exponential backoff 1m/5m/15m (max 3).”
+
+8) Logging & Alerts (Telegram sederhana)
+Task: Log file + notifikasi Telegram saat gagal ≥3x atau token invalid.
+
+Deliverable: src/services/Logger.php, src/services/Alert/Telegram.php.
+
+Helper: Codex (HTTP bot), DevOps (bot token).
+
+Prompt Codex: “Add Telegram Bot API notifier function send(text) and integrate in worker when retries exceed 3.”
+
+Acceptance P0:
+
+POST /api/autopost/ingest → job tersimpan.
+
+Cron worker mem‑posting ke Facebook Page sukses (dengan caption+gambar+UTM).
+
+Gagal → retry & alert Telegram.
+
+P1 — Reliability & Multi‑Channel (kuat untuk go‑live)
+Tujuan: tambah channel, perkuat kontrol, dan observability minimal.
+
+9) Connector: Instagram (IG Business)
+Task: 2‑step upload → publish (/media → /media_publish).
+
+Deliverable: Dispatcher/Instagram.php.
+
+Helper: Codex (2 call flow), Backend.
+
+Prompt: “Implement Instagram Graph posting image with caption: create media then publish; handle errors & return id.”
+
+10) Connector: Telegram Bot
+Task: sendPhoto / sendMessage (fallback).
+
+Deliverable: Dispatcher/Telegram.php.
+
+Helper: Codex.
+
+Prompt: “Create PHP class to send photo with caption to Telegram channel via bot token and chat_id.”
+
+11) Connector: X/Twitter
+Task: Upload media + post status.
+
+Deliverable: Dispatcher/Twitter.php.
+
+Helper: Codex (OAuth 1.1/2), Backend.
+
+Prompt: “Implement Twitter API posting with media upload and status update, env‑based credentials.”
+
+12) Queue Dashboard (read‑only)
+Task: GET /api/autopost/posts, GET /api/autopost/queue; halaman admin sederhana (table).
+
+Deliverable: public/admin/index.html (minimal), endpoint GET.
+
+Helper: Codex (render JSON → table), PM (kolom KPI).
+
+Prompt: “Build simple HTML admin reading JSON from /api/autopost/queue and /posts, sortable by time & status.”
+
+13) Shortlink (opsional) / Bitly adapter
+Task: Adapter shortlink; prefer Bitly dulu biar cepat.
+
+Deliverable: services/Shortlink.php.
+
+Helper: Codex.
+
+Prompt: “Create Bitly shortener wrapper; if BITLY_TOKEN empty, return original URL.”
+
+14) Cooldown & Dedup
+Task: Hindari spam: rule “jangan post item game+window sama <60 menit>”.
+
+Deliverable: Queue::shouldSkip() + flag di DB.
+
+Helper: Codex (SQL check), Growth (rule).
+
+Prompt: “Add dedup check by (game, window) within last 60 minutes before enqueue.”
+
+Acceptance P1:
+
+Bisa posting ke FB + IG + Telegram + Twitter.
+
+Ada dashboard sederhana status job.
+
+Dedup & cooldown jalan.
+
+P2 — Nice‑to‑Have (polish & skalabilitas)
+Tujuan: meningkatkan efektivitas & maintainability.
+
+15) Webhook Listener (News/AI)
+Task: Endpoint POST /api/autopost/webhook/{source} catat ke webhooks_log → masukkan ke queue.
+
+Helper: Codex.
+
+Prompt: “Implement webhook endpoint to accept content from PrimesAI generators; validate signature header.”
+
+16) Image Card Generator (opsional)
+Task: Render kartu (judul, RTP, jam) via GD/Imagick atau Node Canvas.
+
+Helper: Codex (template), Design (brand).
+
+Prompt: “Generate 1080x1080 PNG card with title, rtp%, time using PHP GD; return file_url.”
+
+17) A/B Caption
+Task: 2 varian hook; rotate atau split platforms.
+
+Helper: Codex (templater mod), Growth (copy).
+
+Prompt: “Extend Templater to support variants A/B, choose based on job.meta.”
+
+18) Metrics Collector
+Task: Jika pakai shortlink self‑host, hit /go/:id → simpan click ke metrics_clicks.
+
+Helper: Codex.
+
+Prompt: “Add redirect controller /go/{id} that logs click (queue_id, platform) then redirects 302 to target.”
+
+19) Healthcheck & Token Expiry
+Task: Endpoint /health, cek token expiry (Meta long‑lived), kirim alert H‑24.
+
+Helper: Codex.
+
+Prompt: “Add health endpoint returning {ok, tokens:{fb,ig,twitter}} and alert when expiring in <24h.”
+
