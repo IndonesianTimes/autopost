@@ -7,6 +7,7 @@ require_once __DIR__ . '/../src/bootstrap.php';
 use App\Models\Post;
 use App\Models\Queue;
 use App\Services\Dispatcher\Facebook;
+use App\Services\Dispatcher\Instagram;
 use App\Services\Templater;
 use App\Services\UTMBuilder;
 use App\Services\Logger;
@@ -74,7 +75,32 @@ foreach ($jobs as $job) {
                 }
             }
         }
-        // other platforms ignored in P0
+        elseif ($platform === 'ig') {
+            $bizId = $_ENV['IG_BUSINESS_ID'] ?? '';
+            $accessToken = $_ENV['IG_ACCESS_TOKEN'] ?? '';
+            $resp = Instagram::postPhoto($bizId, $accessToken, $imageUrl, $caption);
+
+            $logData = [
+                'caption' => $caption,
+                'tracked_link' => $trackedLink,
+                'response' => $resp['raw'] ?? null,
+            ];
+
+            if ($resp['ok']) {
+                Post::log($id, 'ig', $resp['id'] ?? null, 'posted', $logData);
+                Logger::info("Job {$id} posted to IG", $logData);
+            } else {
+                $logData['error'] = $resp['error'] ?? null;
+                Post::log($id, 'ig', null, 'failed', $logData);
+                $jobSuccess = false;
+                $errorReason = $resp['error'] ?? 'Unknown error';
+                Logger::error("Job {$id} IG error: {$errorReason}", $logData);
+
+                if (str_contains($errorReason, 'OAuthException')) {
+                    Telegram::send("[Autopost] Job #{$id} IG auth error: {$errorReason}");
+                }
+            }
+        }
     }
 
     if ($jobSuccess) {
