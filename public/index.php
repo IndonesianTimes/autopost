@@ -3,7 +3,14 @@
 require_once __DIR__ . '/../src/bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-$uri = rtrim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/') ?: '/';
+
+// Normalize the request URI by removing the script's base path
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$basePath = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/');
+if ($basePath && str_starts_with($uri, $basePath)) {
+    $uri = substr($uri, strlen($basePath));
+}
+$uri = rtrim($uri, '/') ?: '/';
 
 if ($method === 'GET' && $uri === '/health') {
     json(200, ['ok' => true, 'php' => PHP_VERSION]);
