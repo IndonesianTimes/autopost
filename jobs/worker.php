@@ -9,6 +9,8 @@ use App\Models\Queue;
 use App\Services\Dispatcher\Facebook;
 use App\Services\Templater;
 use App\Services\UTMBuilder;
+use App\Services\Logger;
+use App\Services\Alert\Telegram;
 
 ini_set('max_execution_time', '120');
 
@@ -59,11 +61,17 @@ foreach ($jobs as $job) {
 
             if ($resp['ok']) {
                 Post::log($id, 'fb', $resp['id'] ?? null, 'posted', $logData);
+                Logger::info("Job {$id} posted to FB", $logData);
             } else {
                 $logData['error'] = $resp['error'] ?? null;
                 Post::log($id, 'fb', null, 'failed', $logData);
                 $jobSuccess = false;
                 $errorReason = $resp['error'] ?? 'Unknown error';
+                Logger::error("Job {$id} FB error: {$errorReason}", $logData);
+
+                if (str_contains($errorReason, 'OAuthException')) {
+                    Telegram::send("[Autopost] Job #{$id} FB auth error: {$errorReason}");
+                }
             }
         }
         // other platforms ignored in P0
@@ -73,6 +81,7 @@ foreach ($jobs as $job) {
         Queue::markPosted($id);
         $success++;
         logMessage("Job {$id} posted");
+        Logger::info("Job {$id} posted");
     } else {
         $retries = (int)($job['retries'] ?? 0);
         $scheme = [1, 5, 15];
@@ -80,10 +89,13 @@ foreach ($jobs as $job) {
             $backoff = $scheme[$retries] ?? end($scheme);
             Queue::scheduleRetry($id, $backoff);
             logMessage("Job {$id} retry #" . ($retries + 1) . " in {$backoff}m: {$errorReason}");
+            Logger::error("Job {$id} retry #" . ($retries + 1) . ": {$errorReason}", ['backoff' => $backoff]);
         } else {
             Queue::markFailed($id, $errorReason);
             $failed++;
             logMessage("Job {$id} failed: {$errorReason}");
+            Logger::error("Job {$id} failed after retries: {$errorReason}");
+            Telegram::send("[Autopost] Job #{$id} FAILED after retries: {$errorReason}");
         }
     }
 }
