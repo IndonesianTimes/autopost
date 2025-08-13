@@ -14,9 +14,24 @@ function jsonResponse($data, int $status = 200): void
 
 function bearerAuth(): ?string
 {
-    $header = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
-    if (preg_match('/Bearer\s+(.*)$/i', $header, $matches)) {
+    $header = '';
+    if (function_exists('getallheaders')) {
+        $headers = getallheaders();
+        if (isset($headers['Authorization'])) {
+            $header = $headers['Authorization'];
+        }
+    }
+    if ($header === '' && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        $header = $_SERVER['HTTP_AUTHORIZATION'];
+    }
+    if ($header === '' && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        $header = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+    }
+    if ($header !== '' && preg_match('/Bearer\s+(.*)$/i', $header, $matches)) {
         return trim($matches[1]);
+    }
+    if (isset($_GET['token'])) {
+        return (string)$_GET['token'];
     }
     return null;
 }
