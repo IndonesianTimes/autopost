@@ -15,6 +15,7 @@ $checks['PHP >= 8.2'] = PHP_VERSION_ID >= 80200;
 $checks['Extension pdo_mysql'] = extension_loaded('pdo_mysql');
 $storagePath = dirname(__DIR__) . '/storage';
 $checks['Storage writable'] = is_writable($storagePath) && is_writable($storagePath . '/logs');
+$checks['Composer autoload'] = class_exists(App\Worker\QueueProcessor::class);
 
 $lockFile = '/tmp/sae_worker.lock';
 $lockHandle = @fopen($lockFile, 'w');
@@ -38,10 +39,10 @@ try {
 
 if ($checks['DB connection']) {
     $checks['Table social_queue'] = checkTable($db, 'social_queue', [
-        'id','title','summary','link_url','image_url','channels','status','publish_at','retry_count','last_attempt_at','created_at'
+        'id','title','summary','link_url','image_url','channels','status','publish_at','retry_count','last_attempt_at','last_error_code','last_error_message','created_at'
     ]);
     $checks['Table social_posts'] = checkTable($db, 'social_posts', [
-        'id','queue_id','platform','post_id','posted_at','raw_response'
+        'id','queue_id','platform','post_id','raw_response','posted_at'
     ]);
     $checks['Table webhooks_log'] = checkTable($db, 'webhooks_log', [
         'id','queue_id','platform','response_code','error_message','response_body','created_at'
