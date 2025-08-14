@@ -27,7 +27,7 @@ class Logger
         try {
             $db = self::db();
             $json = json_encode($raw, JSON_UNESCAPED_UNICODE);
-            $stmt = $db->prepare('INSERT INTO social_posts (queue_id, platform, platform_post_id, status, response_json, posted_at) VALUES (:qid,:pf,:pid,\'posted\',:resp,NOW())');
+            $stmt = $db->prepare('INSERT INTO social_posts (queue_id, platform, post_id, raw_response, posted_at) VALUES (:qid,:pf,:pid,:resp,NOW())');
             $stmt->execute([
                 ':qid' => $queueId,
                 ':pf'  => $platform,
@@ -46,17 +46,14 @@ class Logger
     {
         try {
             $db = self::db();
-            $payload = [
-                'queue_id' => $queueId,
-                'code' => $code,
-                'message' => $message,
-                'response' => $responseRaw,
-            ];
-            $json = json_encode($payload, JSON_UNESCAPED_UNICODE);
-            $stmt = $db->prepare('INSERT INTO webhooks_log (source, payload_json) VALUES (:src,:payload)');
+            $json = json_encode($responseRaw, JSON_UNESCAPED_UNICODE);
+            $stmt = $db->prepare('INSERT INTO webhooks_log (queue_id, platform, response_code, error_message, response_body) VALUES (:qid,:pf,:code,:msg,:resp)');
             $stmt->execute([
-                ':src' => $platform,
-                ':payload' => self::truncate($json ?: ''),
+                ':qid' => $queueId,
+                ':pf' => $platform,
+                ':code' => $code,
+                ':msg' => $message,
+                ':resp' => self::truncate($json ?: ''),
             ]);
         } catch (\Throwable $e) {
             // swallow logging errors

@@ -12,6 +12,10 @@
             "App\\": "src/"
         }
     },
+    "scripts": {
+        "doctor": "php bin/doctor",
+        "smoke": "php scripts/dev/smoke.php"
+    },
     "require-dev": {
         "phpunit/phpunit": "^10.5"
     },

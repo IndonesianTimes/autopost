@@ -1,0 +1,78 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use App\Helpers\Config;
+use App\Helpers\Db;
+
+Config::load(dirname(__DIR__));
+
+$checks = [];
+$checks['PHP >= 8.2'] = PHP_VERSION_ID >= 80200;
+$checks['Extension pdo_mysql'] = extension_loaded('pdo_mysql');
+$storagePath = dirname(__DIR__) . '/storage';
+$checks['Storage writable'] = is_writable($storagePath) && is_writable($storagePath . '/logs');
+
+$lockFile = '/tmp/sae_worker.lock';
+$lockHandle = @fopen($lockFile, 'w');
+if ($lockHandle) {
+    fwrite($lockHandle, 'ok');
+    fclose($lockHandle);
+    unlink($lockFile);
+    $checks['/tmp writable'] = true;
+} else {
+    $checks['/tmp writable'] = false;
+}
+
+try {
+    $db = Db::instance();
+    $db->query('SELECT 1');
+    $checks['DB connection'] = true;
+} catch (\Throwable $e) {
+    $checks['DB connection'] = false;
+    $dbError = $e->getMessage();
+}
+
+if ($checks['DB connection']) {
+    $checks['Table social_queue'] = checkTable($db, 'social_queue', [
+        'id','title','summary','link_url','image_url','channels','status','publish_at','retry_count','last_attempt_at','created_at'
+    ]);
+    $checks['Table social_posts'] = checkTable($db, 'social_posts', [
+        'id','queue_id','platform','post_id','posted_at','raw_response'
+    ]);
+    $checks['Table webhooks_log'] = checkTable($db, 'webhooks_log', [
+        'id','queue_id','platform','response_code','error_message','response_body','created_at'
+    ]);
+}
+
+$allOk = true;
+foreach ($checks as $label => $ok) {
+    if ($ok) {
+        echo "[OK] {$label}\n";
+    } else {
+        $allOk = false;
+        $msg = $label === 'DB connection' ? ($dbError ?? '') : '';
+        echo "[FAIL] {$label} {$msg}\n";
+    }
+}
+
+exit($allOk ? 0 : 1);
+
+function checkTable(PDO $db, string $table, array $columns): bool
+{
+    try {
+        $stmt = $db->query("DESCRIBE {$table}");
+        $existing = $stmt->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($columns as $col) {
+            if (!in_array($col, $existing, true)) {
+                return false;
+            }
+        }
+        return true;
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
