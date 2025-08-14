@@ -13,6 +13,10 @@ class Logger
         return Db::instance();
     }
 
+    private const LOG_FILE = '/storage/logs/sae_worker.log';
+    private const MAX_FILE_SIZE = 5242880; // 5MB
+    private const MAX_FILES = 5;
+
     private static function truncate(string $json, int $max = 10000): string
     {
         return strlen($json) > $max ? substr($json, 0, $max) : $json;
@@ -56,6 +60,47 @@ class Logger
             ]);
         } catch (\Throwable $e) {
             // swallow logging errors
+        }
+    }
+
+    public static function cli(string $message): void
+    {
+        $line = '[' . date('Y-m-d H:i:s') . '] ' . $message;
+        echo $line . PHP_EOL;
+        self::writeLog($line);
+    }
+
+    private static function writeLog(string $line): void
+    {
+        $file = self::logPath();
+        $dir = dirname($file);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        self::rotate($file);
+        file_put_contents($file, $line . PHP_EOL, FILE_APPEND);
+    }
+
+    private static function logPath(): string
+    {
+        return dirname(__DIR__, 2) . self::LOG_FILE;
+    }
+
+    private static function rotate(string $file): void
+    {
+        if (file_exists($file) && filesize($file) >= self::MAX_FILE_SIZE) {
+            $max = self::MAX_FILES;
+            $oldest = $file . '.' . $max;
+            if (file_exists($oldest)) {
+                unlink($oldest);
+            }
+            for ($i = $max - 1; $i >= 1; $i--) {
+                $src = $file . '.' . $i;
+                if (file_exists($src)) {
+                    rename($src, $file . '.' . ($i + 1));
+                }
+            }
+            rename($file, $file . '.1');
         }
     }
 }
