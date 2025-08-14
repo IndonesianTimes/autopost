@@ -9,6 +9,7 @@ use App\Exceptions\PlatformException;
 use App\Helpers\Config;
 use App\Helpers\Db;
 use App\Helpers\Lock;
+use App\Helpers\Logger;
 use App\Helpers\RetryPolicy;
 use DateTimeImmutable;
 use PDO;
@@ -64,15 +65,14 @@ class QueueProcessor
                 $payload = $job + ['dedupe_key' => $queueId . ':' . $platform];
                 $resp = $dispatcher->post($payload);
                 $postId = $resp['post_id'] ?? null;
-                $this->logSuccess($queueId, $platform, $postId, $resp);
+                // success already logged by dispatcher
                 $this->notify("Posted #{$queueId} to {$platform}");
             } catch (PlatformException $e) {
                 $allSuccess = false;
-                $this->logError($platform, $e->response);
                 $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             } catch (\Throwable $e) {
                 $allSuccess = false;
-                $this->logError($platform, ['error' => $e->getMessage()]);
+                Logger::logError($queueId, $platform, 0, $e->getMessage(), []);
                 $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             }
         }
@@ -102,7 +102,11 @@ class QueueProcessor
     private function getDispatcher(string $platform): DispatcherInterface
     {
         if (!isset($this->dispatchers[$platform])) {
-            $class = 'App\\Dispatcher\\' . ucfirst($platform) . 'Dispatcher';
+            $base = 'App\\Dispatcher\\' . ucfirst($platform);
+            $class = $base . 'Dispatcher';
+            if (!class_exists($class)) {
+                $class = $base;
+            }
             if (!class_exists($class)) {
                 throw new RuntimeException("Dispatcher for {$platform} not found");
             }
@@ -118,25 +122,6 @@ class QueueProcessor
         return (int)$stmt->fetchColumn() > 0;
     }
 
-    private function logSuccess(int $queueId, string $platform, ?string $postId, array $resp): void
-    {
-        $stmt = $this->db->prepare('INSERT INTO social_posts (queue_id, platform, platform_post_id, status, response_json, posted_at) VALUES (:qid,:pf,:pid,\'posted\',:resp,NOW())');
-        $stmt->execute([
-            ':qid' => $queueId,
-            ':pf' => $platform,
-            ':pid' => $postId,
-            ':resp' => json_encode($resp, JSON_UNESCAPED_UNICODE),
-        ]);
-    }
-
-    private function logError(string $platform, array $resp): void
-    {
-        $stmt = $this->db->prepare('INSERT INTO webhooks_log (source, payload_json) VALUES (:src,:payload)');
-        $stmt->execute([
-            ':src' => $platform,
-            ':payload' => json_encode($resp, JSON_UNESCAPED_UNICODE),
-        ]);
-    }
 
     private function scheduleRetry(array $job): void
     {
