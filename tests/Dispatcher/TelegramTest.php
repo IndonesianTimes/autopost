@@ -24,7 +24,7 @@ class TelegramTest extends TestCase
         $payload = [
             'bot_token' => 'token',
             'chat_id' => '123',
-            'caption' => 'hello',
+            'caption' => 'hello  ',
             'image_url' => 'http://example.com/img.jpg',
         ];
 
@@ -49,7 +49,7 @@ class TelegramTest extends TestCase
         $payload = [
             'bot_token' => 'token',
             'chat_id' => '123',
-            'caption' => 'hello',
+            'caption' => 'hello  ',
             'image_url' => 'http://example.com/img.jpg',
         ];
 
@@ -71,7 +71,7 @@ class TelegramTest extends TestCase
         $payload = [
             'bot_token' => 'token',
             'chat_id' => '123',
-            'caption' => 'hello',
+            'caption' => 'hello  ',
             'image_url' => 'http://example.com/img.jpg',
         ];
 

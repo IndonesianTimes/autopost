@@ -27,7 +27,7 @@ class FacebookTest extends TestCase
             'page_id' => '1',
             'page_access_token' => 'token',
             'image_url' => 'http://example.com/a.jpg',
-            'caption' => 'Caption',
+            'caption' => " Caption  ",
         ]);
 
         $this->assertSame('facebook', $result['platform']);
@@ -47,7 +47,7 @@ class FacebookTest extends TestCase
         $result = $dispatcher->post([
             'page_id' => '1',
             'page_access_token' => 'token',
-            'caption' => 'Hi',
+            'caption' => "Hi  ",
             'text_only' => true,
         ]);
 

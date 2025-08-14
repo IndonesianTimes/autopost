@@ -7,6 +7,7 @@ namespace App\Dispatcher;
 use App\Contracts\DispatcherInterface;
 use App\Exceptions\PlatformException;
 use App\Helpers\Logger;
+use App\Helpers\Sanitizer;
 
 /**
  * Instagram Business dispatcher using Graph API.
@@ -41,18 +42,21 @@ class Instagram implements DispatcherInterface
                 }
             }
 
-            $caption = str_replace(["\r\n", "\r"], "\n", (string) $payload['caption']);
-            if (mb_strlen($caption) > self::MAX_CAPTION) {
-                throw new PlatformException('instagram', 422, 'Caption exceeds maximum length');
-            }
+            $caption = Sanitizer::sanitizeCaption((string) $payload['caption'], self::MAX_CAPTION);
 
             $igUserId = $payload['account_id'];
             $token = $payload['access_token'];
 
+            try {
+                $imageUrl = Sanitizer::validateImageUrl($payload['image_url']);
+            } catch (\InvalidArgumentException $e) {
+                throw new PlatformException('instagram', 422, $e->getMessage());
+            }
+
             $media = $this->request(
                 self::BASE_URL . $igUserId . '/media',
                 [
-                    'image_url' => $payload['image_url'],
+                    'image_url' => $imageUrl,
                     'caption' => $caption,
                 ],
                 $token

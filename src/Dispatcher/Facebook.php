@@ -7,6 +7,7 @@ namespace App\Dispatcher;
 use App\Contracts\DispatcherInterface;
 use App\Exceptions\PlatformException;
 use App\Helpers\Logger;
+use App\Helpers\Sanitizer;
 
 /**
  * Facebook Page dispatcher using Graph API.
@@ -43,8 +44,15 @@ class Facebook implements DispatcherInterface
 
             $pageId = (string) $payload['page_id'];
             $token = (string) $payload['page_access_token'];
-            $caption = (string) $payload['caption'];
+            $caption = Sanitizer::sanitizeCaption((string) $payload['caption'], 63206);
             $imageUrl = $payload['image_url'] ?? null;
+            if ($imageUrl !== null) {
+                try {
+                    $imageUrl = Sanitizer::validateImageUrl($imageUrl);
+                } catch (\InvalidArgumentException $e) {
+                    throw new PlatformException('facebook', 422, $e->getMessage());
+                }
+            }
             $textOnly = (bool)($payload['text_only'] ?? false);
             $dedupe = $payload['dedupe_key'] ?? null;
 
