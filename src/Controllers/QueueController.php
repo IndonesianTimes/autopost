@@ -15,7 +15,7 @@ class QueueController
 
         $statusParam = $_GET['status'] ?? 'pending';
         $statusMap = [
-            'pending' => 'ready',
+            'pending' => 'pending',
             'retry' => 'retry',
             'posted' => 'posted',
             'failed' => 'failed',
@@ -32,7 +32,7 @@ class QueueController
         $offset = max(0, $offset);
 
         $pdo = Db::instance();
-        $sql = 'SELECT id, title, channels, status, publish_at, retries AS retry_count, updated_at AS last_attempt_at '
+        $sql = 'SELECT id, title, channels, status, publish_at, retry_count, last_attempt_at '
              . 'FROM social_queue WHERE status = :status ORDER BY publish_at ASC LIMIT :limit OFFSET :offset';
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':status', $dbStatus);
@@ -40,11 +40,6 @@ class QueueController
         $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
         $stmt->execute();
         $rows = $stmt->fetchAll();
-        foreach ($rows as &$row) {
-            if ($row['status'] === 'ready') {
-                $row['status'] = 'pending';
-            }
-        }
 
         json(200, $rows);
     }
@@ -59,7 +54,7 @@ class QueueController
         $offset = max(0, $offset);
 
         $pdo = Db::instance();
-        $sql = 'SELECT p.id, q.title, q.channels, p.status, q.publish_at, q.retries AS retry_count, '
+        $sql = 'SELECT p.id, q.title, q.channels, q.status, q.publish_at, q.retry_count, '
              . 'p.posted_at AS last_attempt_at '
              . 'FROM social_posts p JOIN social_queue q ON p.queue_id = q.id '
              . 'ORDER BY p.id DESC LIMIT :limit OFFSET :offset';

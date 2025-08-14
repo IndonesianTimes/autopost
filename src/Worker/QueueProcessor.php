@@ -10,7 +10,9 @@ use App\Helpers\Config;
 use App\Helpers\Db;
 use App\Helpers\Lock;
 use App\Helpers\Logger;
+use App\Helpers\Notifier;
 use App\Helpers\RetryPolicy;
+use App\Dispatcher\MockDispatcher;
 use DateTimeImmutable;
 use PDO;
 use RuntimeException;
@@ -19,10 +21,12 @@ class QueueProcessor
 {
     private PDO $db;
     private array $dispatchers = [];
+    private bool $dryRun = false;
 
     public function __construct()
     {
         $this->db = Db::instance();
+        $this->dryRun = Config::bool('DRY_RUN', false);
     }
 
     public function run(): void
@@ -67,21 +71,25 @@ class QueueProcessor
                 $resp = $dispatcher->post($payload);
                 // success already logged by dispatcher
                 Logger::cli("#{$queueId} {$platform} ok");
-                $this->notify("Posted #{$queueId} to {$platform}");
+                Notifier::notify("Posted #{$queueId} to {$platform}");
             } catch (PlatformException $e) {
                 $allSuccess = false;
+                $stmt = $this->db->prepare("UPDATE social_queue SET last_error_code=:code, last_error_message=:msg WHERE id=:id");
+                $stmt->execute([':code' => $e->getCode(), ':msg' => $e->getMessage(), ':id' => $queueId]);
                 Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
-                $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
+                Notifier::notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             } catch (\Throwable $e) {
                 $allSuccess = false;
                 Logger::logError($queueId, $platform, 0, $e->getMessage(), []);
+                $stmt = $this->db->prepare("UPDATE social_queue SET last_error_code=:code, last_error_message=:msg WHERE id=:id");
+                $stmt->execute([':code' => 0, ':msg' => $e->getMessage(), ':id' => $queueId]);
                 Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
-                $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
+                Notifier::notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             }
         }
 
         if ($allSuccess) {
-            $stmt = $this->db->prepare("UPDATE social_queue SET status='posted' WHERE id=:id");
+            $stmt = $this->db->prepare("UPDATE social_queue SET status='posted', last_error_code=NULL, last_error_message=NULL WHERE id=:id");
             $stmt->execute([':id' => $queueId]);
             Logger::cli("Job #{$queueId} done");
         } else {
@@ -107,15 +115,19 @@ class QueueProcessor
     private function getDispatcher(string $platform): DispatcherInterface
     {
         if (!isset($this->dispatchers[$platform])) {
-            $base = 'App\\Dispatcher\\' . ucfirst($platform);
-            $class = $base . 'Dispatcher';
-            if (!class_exists($class)) {
-                $class = $base;
+            if ($this->dryRun) {
+                $this->dispatchers[$platform] = new MockDispatcher($platform);
+            } else {
+                $base = 'App\\Dispatcher\\' . ucfirst($platform);
+                $class = $base . 'Dispatcher';
+                if (!class_exists($class)) {
+                    $class = $base;
+                }
+                if (!class_exists($class)) {
+                    throw new RuntimeException("Dispatcher for {$platform} not found");
+                }
+                $this->dispatchers[$platform] = new $class();
             }
-            if (!class_exists($class)) {
-                throw new RuntimeException("Dispatcher for {$platform} not found");
-            }
-            $this->dispatchers[$platform] = new $class();
         }
         return $this->dispatchers[$platform];
     }
@@ -137,7 +149,7 @@ class QueueProcessor
         if ($current >= RetryPolicy::MAX_RETRY) {
             $stmt = $this->db->prepare("UPDATE social_queue SET status='failed', retry_count=:rc, last_attempt_at=:now WHERE id=:id");
             $stmt->execute([':rc' => $current, ':now' => $now->format('Y-m-d H:i:s'), ':id' => $queueId]);
-            $this->notify("Job #{$queueId} failed after retries");
+            Notifier::notify("Job #{$queueId} failed after retries");
             return;
         }
 
@@ -151,31 +163,4 @@ class QueueProcessor
         ]);
     }
 
-    private function notify(string $text): void
-    {
-        $enabled = filter_var((string)Config::get('NOTIFY_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN);
-        if (!$enabled) {
-            return;
-        }
-        $token = Config::get('BOT_TOKEN_ADMIN');
-        $chatId = Config::get('CHAT_ID_ADMIN');
-        if (!$token || !$chatId) {
-            return;
-        }
-        $endpoint = "https://api.telegram.org/bot{$token}/sendMessage";
-        $postFields = [
-            'chat_id' => $chatId,
-            'text' => $text,
-        ];
-        $ch = curl_init($endpoint);
-        curl_setopt_array($ch, [
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => http_build_query($postFields),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 15,
-            CURLOPT_CONNECTTIMEOUT => 15,
-        ]);
-        curl_exec($ch);
-        curl_close($ch);
-    }
 }

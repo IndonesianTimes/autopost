@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace App\Services\Alert;
+namespace App\Helpers;
 
-class Telegram
+class Notifier
 {
-    public static function send(string $text): void
+    public static function notify(string $text): void
     {
-        $token = $_ENV['TG_BOT_TOKEN'] ?? '';
-        $chatId = $_ENV['TG_CHAT_ID_ALERT'] ?? '';
-        if ($token === '' || $chatId === '') {
+        if (!Config::bool('NOTIFY_ENABLED')) {
             return;
         }
-
+        $token = Config::get('BOT_TOKEN_ADMIN');
+        $chatId = Config::get('CHAT_ID_ADMIN');
+        if (!$token || !$chatId) {
+            return;
+        }
         $endpoint = "https://api.telegram.org/bot{$token}/sendMessage";
         $postFields = [
             'chat_id' => $chatId,
             'text' => $text,
-            'parse_mode' => 'HTML',
         ];
-
         $ch = curl_init($endpoint);
         curl_setopt_array($ch, [
             CURLOPT_POST => true,
@@ -29,7 +29,6 @@ class Telegram
             CURLOPT_TIMEOUT => 15,
             CURLOPT_CONNECTTIMEOUT => 15,
         ]);
-
         curl_exec($ch);
         curl_close($ch);
     }
