@@ -9,6 +9,8 @@ use App\Exceptions\PlatformException;
 use App\Helpers\Config;
 use App\Helpers\Db;
 use App\Helpers\Lock;
+use App\Helpers\RetryPolicy;
+use DateTimeImmutable;
 use PDO;
 use RuntimeException;
 
@@ -16,7 +18,6 @@ class QueueProcessor
 {
     private PDO $db;
     private array $dispatchers = [];
-    private array $backoff = [1 => 5, 2 => 15, 3 => 60];
 
     public function __construct()
     {
@@ -60,7 +61,8 @@ class QueueProcessor
             }
             try {
                 $dispatcher = $this->getDispatcher($platform);
-                $resp = $dispatcher->post($job);
+                $payload = $job + ['dedupe_key' => $queueId . ':' . $platform];
+                $resp = $dispatcher->post($payload);
                 $postId = $resp['post_id'] ?? null;
                 $this->logSuccess($queueId, $platform, $postId, $resp);
                 $this->notify("Posted #{$queueId} to {$platform}");
@@ -139,16 +141,24 @@ class QueueProcessor
     private function scheduleRetry(array $job): void
     {
         $queueId = (int)$job['id'];
-        $retry = (int)($job['retry_count'] ?? 0) + 1;
-        if ($retry > 3) {
-            $stmt = $this->db->prepare("UPDATE social_queue SET status='failed', retry_count=:rc, last_attempt_at=NOW() WHERE id=:id");
-            $stmt->execute([':rc' => $retry, ':id' => $queueId]);
+        $current = (int)($job['retry_count'] ?? 0);
+        $now = new DateTimeImmutable('now');
+
+        if ($current >= RetryPolicy::MAX_RETRY) {
+            $stmt = $this->db->prepare("UPDATE social_queue SET status='failed', retry_count=:rc, last_attempt_at=:now WHERE id=:id");
+            $stmt->execute([':rc' => $current, ':now' => $now->format('Y-m-d H:i:s'), ':id' => $queueId]);
             $this->notify("Job #{$queueId} failed after retries");
             return;
         }
-        $minutes = $this->backoff[$retry] ?? end($this->backoff);
-        $stmt = $this->db->prepare("UPDATE social_queue SET status='retry', retry_count=:rc, last_attempt_at=NOW(), publish_at=DATE_ADD(NOW(), INTERVAL :mins MINUTE) WHERE id=:id");
-        $stmt->execute([':rc' => $retry, ':mins' => $minutes, ':id' => $queueId]);
+
+        $next = RetryPolicy::nextSchedule($current);
+        $stmt = $this->db->prepare("UPDATE social_queue SET status='retry', retry_count=:rc, last_attempt_at=:now, publish_at=:next WHERE id=:id");
+        $stmt->execute([
+            ':rc' => $current + 1,
+            ':now' => $now->format('Y-m-d H:i:s'),
+            ':next' => $next->format('Y-m-d H:i:s'),
+            ':id' => $queueId,
+        ]);
     }
 
     private function notify(string $text): void
