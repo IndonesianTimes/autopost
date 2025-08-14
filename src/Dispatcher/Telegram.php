@@ -6,6 +6,7 @@ namespace App\Dispatcher;
 
 use App\Contracts\DispatcherInterface;
 use App\Exceptions\PlatformException;
+use App\Helpers\Logger;
 
 class Telegram implements DispatcherInterface
 {
@@ -27,59 +28,68 @@ class Telegram implements DispatcherInterface
      */
     public function post(array $payload): array
     {
-        foreach (['bot_token', 'chat_id', 'caption'] as $key) {
-            if (empty($payload[$key])) {
-                throw new PlatformException('telegram', 422, "Missing field: {$key}");
+        $queueId = (int)($payload['id'] ?? 0);
+        try {
+            foreach (['bot_token', 'chat_id', 'caption'] as $key) {
+                if (empty($payload[$key])) {
+                    throw new PlatformException('telegram', 422, "Missing field: {$key}");
+                }
             }
-        }
 
-        $token = (string) $payload['bot_token'];
-        $chatId = (string) $payload['chat_id'];
-        $caption = (string) $payload['caption'];
-        $parseMode = $payload['parse_mode'] ?? null;
-        if ($parseMode === 'HTML') {
-            $caption = htmlspecialchars($caption, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-        }
-
-        $imageUrl = $payload['image_url'] ?? null;
-        if (!empty($imageUrl)) {
-            try {
-                $resp = $this->request(
-                    $token,
-                    'sendPhoto',
-                    [
-                        'chat_id' => $chatId,
-                        'photo' => $imageUrl,
-                        'caption' => $caption,
-                        'parse_mode' => $parseMode,
-                    ]
-                );
-
-                return [
-                    'platform' => 'telegram',
-                    'post_id' => (string)($resp['result']['message_id'] ?? ''),
-                    'raw' => $resp,
-                ];
-            } catch (PlatformException $e) {
-                // fallthrough to sendMessage
+            $token = (string) $payload['bot_token'];
+            $chatId = (string) $payload['chat_id'];
+            $caption = (string) $payload['caption'];
+            $parseMode = $payload['parse_mode'] ?? null;
+            if ($parseMode === 'HTML') {
+                $caption = htmlspecialchars($caption, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             }
+
+            $imageUrl = $payload['image_url'] ?? null;
+            if (!empty($imageUrl)) {
+                try {
+                    $resp = $this->request(
+                        $token,
+                        'sendPhoto',
+                        [
+                            'chat_id' => $chatId,
+                            'photo' => $imageUrl,
+                            'caption' => $caption,
+                            'parse_mode' => $parseMode,
+                        ]
+                    );
+                    Logger::logSuccess($queueId, 'telegram', (string)($resp['result']['message_id'] ?? ''), $resp);
+                    return [
+                        'platform' => 'telegram',
+                        'post_id' => (string)($resp['result']['message_id'] ?? ''),
+                        'raw' => $resp,
+                    ];
+                } catch (PlatformException $e) {
+                    Logger::logError($queueId, 'telegram', $e->getCode(), $e->getMessage(), $e->response);
+                    // fallthrough to sendMessage
+                }
+            }
+
+            $resp = $this->request(
+                $token,
+                'sendMessage',
+                [
+                    'chat_id' => $chatId,
+                    'text' => $caption,
+                    'parse_mode' => $parseMode,
+                ]
+            );
+
+            Logger::logSuccess($queueId, 'telegram', (string)($resp['result']['message_id'] ?? ''), $resp);
+
+            return [
+                'platform' => 'telegram',
+                'post_id' => (string)($resp['result']['message_id'] ?? ''),
+                'raw' => $resp,
+            ];
+        } catch (PlatformException $e) {
+            Logger::logError($queueId, 'telegram', $e->getCode(), $e->getMessage(), $e->response);
+            throw $e;
         }
-
-        $resp = $this->request(
-            $token,
-            'sendMessage',
-            [
-                'chat_id' => $chatId,
-                'text' => $caption,
-                'parse_mode' => $parseMode,
-            ]
-        );
-
-        return [
-            'platform' => 'telegram',
-            'post_id' => (string)($resp['result']['message_id'] ?? ''),
-            'raw' => $resp,
-        ];
     }
 
     /**

@@ -6,6 +6,7 @@ namespace App\Dispatcher;
 
 use App\Contracts\DispatcherInterface;
 use App\Exceptions\PlatformException;
+use App\Helpers\Logger;
 
 /**
  * Instagram Business dispatcher using Graph API.
@@ -32,49 +33,57 @@ class Instagram implements DispatcherInterface
      */
     public function post(array $payload): array
     {
-        foreach (['image_url', 'caption', 'account_id', 'access_token'] as $key) {
-            if (empty($payload[$key])) {
-                throw new PlatformException('instagram', 422, "Missing field: {$key}");
+        $queueId = (int)($payload['id'] ?? 0);
+        try {
+            foreach (['image_url', 'caption', 'account_id', 'access_token'] as $key) {
+                if (empty($payload[$key])) {
+                    throw new PlatformException('instagram', 422, "Missing field: {$key}");
+                }
             }
+
+            $caption = str_replace(["\r\n", "\r"], "\n", (string) $payload['caption']);
+            if (mb_strlen($caption) > self::MAX_CAPTION) {
+                throw new PlatformException('instagram', 422, 'Caption exceeds maximum length');
+            }
+
+            $igUserId = $payload['account_id'];
+            $token = $payload['access_token'];
+
+            $media = $this->request(
+                self::BASE_URL . $igUserId . '/media',
+                [
+                    'image_url' => $payload['image_url'],
+                    'caption' => $caption,
+                ],
+                $token
+            );
+
+            if (!isset($media['id'])) {
+                $this->handleError(400, ['error' => ['message' => 'Invalid media response']]);
+            }
+            $creationId = $media['id'];
+
+            $publish = $this->request(
+                self::BASE_URL . $igUserId . '/media_publish',
+                ['creation_id' => $creationId],
+                $token
+            );
+
+            if (!isset($publish['id'])) {
+                $this->handleError(400, ['error' => ['message' => 'Invalid publish response']]);
+            }
+
+            Logger::logSuccess($queueId, 'instagram', (string)$publish['id'], $publish);
+
+            return [
+                'platform' => 'instagram',
+                'post_id' => $publish['id'],
+                'raw' => $publish,
+            ];
+        } catch (PlatformException $e) {
+            Logger::logError($queueId, 'instagram', $e->getCode(), $e->getMessage(), $e->response);
+            throw $e;
         }
-
-        $caption = str_replace(["\r\n", "\r"], "\n", (string) $payload['caption']);
-        if (mb_strlen($caption) > self::MAX_CAPTION) {
-            throw new PlatformException('instagram', 422, 'Caption exceeds maximum length');
-        }
-
-        $igUserId = $payload['account_id'];
-        $token = $payload['access_token'];
-
-        $media = $this->request(
-            self::BASE_URL . $igUserId . '/media',
-            [
-                'image_url' => $payload['image_url'],
-                'caption' => $caption,
-            ],
-            $token
-        );
-
-        if (!isset($media['id'])) {
-            $this->handleError(400, ['error' => ['message' => 'Invalid media response']]);
-        }
-        $creationId = $media['id'];
-
-        $publish = $this->request(
-            self::BASE_URL . $igUserId . '/media_publish',
-            ['creation_id' => $creationId],
-            $token
-        );
-
-        if (!isset($publish['id'])) {
-            $this->handleError(400, ['error' => ['message' => 'Invalid publish response']]);
-        }
-
-        return [
-            'platform' => 'instagram',
-            'post_id' => $publish['id'],
-            'raw' => $publish,
-        ];
     }
 
     /**
