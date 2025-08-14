@@ -12,6 +12,7 @@ use App\Helpers\Lock;
 use App\Helpers\Logger;
 use App\Helpers\Notifier;
 use App\Helpers\RetryPolicy;
+use App\Helpers\ErrorClassifier;
 use App\Dispatcher\MockDispatcher;
 use DateTimeImmutable;
 use PDO;
@@ -59,6 +60,7 @@ class QueueProcessor
         $queueId = (int)$job['id'];
         $channels = $this->parseChannels((string)$job['channels']);
         $allSuccess = true;
+        $shouldRetry = false;
         Logger::cli("Job #{$queueId} start");
 
         foreach ($channels as $platform) {
@@ -68,33 +70,39 @@ class QueueProcessor
             try {
                 $dispatcher = $this->getDispatcher($platform);
                 $payload = $job + ['dedupe_key' => $queueId . ':' . $platform];
-                $resp = $dispatcher->post($payload);
-                // success already logged by dispatcher
+                $dispatcher->post($payload);
                 Logger::cli("#{$queueId} {$platform} ok");
                 Notifier::notify("Posted #{$queueId} to {$platform}");
             } catch (PlatformException $e) {
                 $allSuccess = false;
+                $isRetry = ErrorClassifier::isRetryable($e);
+                $shouldRetry = $shouldRetry || $isRetry;
                 $stmt = $this->db->prepare("UPDATE social_queue SET last_error_code=:code, last_error_message=:msg WHERE id=:id");
-                $stmt->execute([':code' => $e->getCode(), ':msg' => $e->getMessage(), ':id' => $queueId]);
+                $stmt->execute([':code' => (string)$e->getCode(), ':msg' => $e->getMessage(), ':id' => $queueId]);
                 Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
                 Notifier::notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             } catch (\Throwable $e) {
                 $allSuccess = false;
+                $shouldRetry = true;
                 Logger::logError($queueId, $platform, 0, $e->getMessage(), []);
                 $stmt = $this->db->prepare("UPDATE social_queue SET last_error_code=:code, last_error_message=:msg WHERE id=:id");
-                $stmt->execute([':code' => 0, ':msg' => $e->getMessage(), ':id' => $queueId]);
+                $stmt->execute([':code' => '0', ':msg' => $e->getMessage(), ':id' => $queueId]);
                 Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
                 Notifier::notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             }
         }
 
+        $now = new DateTimeImmutable('now');
         if ($allSuccess) {
-            $stmt = $this->db->prepare("UPDATE social_queue SET status='posted', last_error_code=NULL, last_error_message=NULL WHERE id=:id");
-            $stmt->execute([':id' => $queueId]);
+            $stmt = $this->db->prepare("UPDATE social_queue SET status='posted', last_error_code=NULL, last_error_message=NULL, last_attempt_at=:now WHERE id=:id");
+            $stmt->execute([':id' => $queueId, ':now' => $now->format('Y-m-d H:i:s')]);
             Logger::cli("Job #{$queueId} done");
-        } else {
-            $this->scheduleRetry($job);
+        } elseif ($shouldRetry) {
+            $this->scheduleRetry($job, $now);
             Logger::cli("Job #{$queueId} retry");
+        } else {
+            $this->markFailed($job, $now);
+            Logger::cli("Job #{$queueId} failed");
         }
     }
 
@@ -140,11 +148,10 @@ class QueueProcessor
     }
 
 
-    private function scheduleRetry(array $job): void
+    private function scheduleRetry(array $job, DateTimeImmutable $now): void
     {
         $queueId = (int)$job['id'];
         $current = (int)($job['retry_count'] ?? 0);
-        $now = new DateTimeImmutable('now');
 
         if ($current >= RetryPolicy::MAX_RETRY) {
             $stmt = $this->db->prepare("UPDATE social_queue SET status='failed', retry_count=:rc, last_attempt_at=:now WHERE id=:id");
@@ -161,6 +168,15 @@ class QueueProcessor
             ':next' => $next->format('Y-m-d H:i:s'),
             ':id' => $queueId,
         ]);
+    }
+
+    private function markFailed(array $job, DateTimeImmutable $now): void
+    {
+        $queueId = (int)$job['id'];
+        $current = (int)($job['retry_count'] ?? 0);
+        $stmt = $this->db->prepare("UPDATE social_queue SET status='failed', retry_count=:rc, last_attempt_at=:now WHERE id=:id");
+        $stmt->execute([':rc' => $current, ':now' => $now->format('Y-m-d H:i:s'), ':id' => $queueId]);
+        Notifier::notify("Job #{$queueId} failed");
     }
 
 }

@@ -8,7 +8,7 @@ use App\Contracts\DispatcherInterface;
 use App\Helpers\Logger;
 use App\Helpers\Sanitizer;
 
-class TwitterDispatcher implements DispatcherInterface
+class Twitter implements DispatcherInterface
 {
     public function post(array $payload): array
     {
