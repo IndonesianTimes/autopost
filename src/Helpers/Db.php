@@ -13,11 +13,10 @@ class Db
     public static function instance(): PDO
     {
         if (self::$pdo === null) {
-            $dsn = sprintf('mysql:host=%s;dbname=%s;charset=utf8mb4',
-                Config::get('DB_HOST', 'localhost'),
-                Config::get('DB_NAME', '')
-            );
-            self::$pdo = new PDO($dsn, Config::get('DB_USER', ''), Config::get('DB_PASS', ''), [
+            $dsn = Config::require('DB_DSN');
+            $user = Config::require('DB_USER');
+            $pass = Config::get('DB_PASS', '');
+            self::$pdo = new PDO($dsn, $user, $pass, [
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);

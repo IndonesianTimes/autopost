@@ -148,8 +148,12 @@ class QueueProcessor
 
     private function notify(string $text): void
     {
-        $token = Config::get('TG_BOT_TOKEN');
-        $chatId = Config::get('TG_CHAT_ID_ALERT');
+        $enabled = filter_var((string)Config::get('NOTIFY_ENABLED', 'false'), FILTER_VALIDATE_BOOLEAN);
+        if (!$enabled) {
+            return;
+        }
+        $token = Config::get('BOT_TOKEN_ADMIN');
+        $chatId = Config::get('CHAT_ID_ADMIN');
         if (!$token || !$chatId) {
             return;
         }

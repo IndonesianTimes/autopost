@@ -20,4 +20,13 @@ class Config
     {
         return $_ENV[$key] ?? $default;
     }
+
+    public static function require(string $key): string
+    {
+        $value = trim((string)($_ENV[$key] ?? ''));
+        if ($value === '') {
+            throw new \RuntimeException("Missing required env: {$key}");
+        }
+        return $value;
+    }
 }
