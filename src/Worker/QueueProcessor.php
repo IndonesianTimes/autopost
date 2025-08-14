@@ -55,6 +55,7 @@ class QueueProcessor
         $queueId = (int)$job['id'];
         $channels = $this->parseChannels((string)$job['channels']);
         $allSuccess = true;
+        Logger::cli("Job #{$queueId} start");
 
         foreach ($channels as $platform) {
             if ($this->isAlreadyPosted($queueId, $platform)) {
@@ -64,15 +65,17 @@ class QueueProcessor
                 $dispatcher = $this->getDispatcher($platform);
                 $payload = $job + ['dedupe_key' => $queueId . ':' . $platform];
                 $resp = $dispatcher->post($payload);
-                $postId = $resp['post_id'] ?? null;
                 // success already logged by dispatcher
+                Logger::cli("#{$queueId} {$platform} ok");
                 $this->notify("Posted #{$queueId} to {$platform}");
             } catch (PlatformException $e) {
                 $allSuccess = false;
+                Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
                 $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             } catch (\Throwable $e) {
                 $allSuccess = false;
                 Logger::logError($queueId, $platform, 0, $e->getMessage(), []);
+                Logger::cli("#{$queueId} {$platform} fail {$e->getMessage()}");
                 $this->notify("Fail {$platform} #{$queueId}: {$e->getMessage()}");
             }
         }
@@ -80,8 +83,10 @@ class QueueProcessor
         if ($allSuccess) {
             $stmt = $this->db->prepare("UPDATE social_queue SET status='posted' WHERE id=:id");
             $stmt->execute([':id' => $queueId]);
+            Logger::cli("Job #{$queueId} done");
         } else {
             $this->scheduleRetry($job);
+            Logger::cli("Job #{$queueId} retry");
         }
     }
 
