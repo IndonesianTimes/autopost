@@ -17,9 +17,19 @@ if ($method === 'GET' && $uri === '/health') {
     return;
 }
 
-if ($method === 'POST' && $uri === '/api/autopost/ingest') {
-    \App\Controllers\IngestController::ingest();
-    return;
-}
+  if ($method === 'POST' && $uri === '/api/autopost/ingest') {
+      \App\Controllers\IngestController::ingest();
+      return;
+  }
 
-json(404, 'Not Found');
+  if ($method === 'GET' && $uri === '/api/autopost/queue') {
+      \App\Controllers\QueueController::queue();
+      return;
+  }
+
+  if ($method === 'GET' && $uri === '/api/autopost/posts') {
+      \App\Controllers\QueueController::posts();
+      return;
+  }
+
+  json(404, 'Not Found');
