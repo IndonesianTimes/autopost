@@ -7,6 +7,7 @@ namespace App\Dispatcher;
 use App\Contracts\DispatcherInterface;
 use App\Exceptions\PlatformException;
 use App\Helpers\Logger;
+use App\Helpers\Sanitizer;
 
 class Telegram implements DispatcherInterface
 {
@@ -38,7 +39,7 @@ class Telegram implements DispatcherInterface
 
             $token = (string) $payload['bot_token'];
             $chatId = (string) $payload['chat_id'];
-            $caption = (string) $payload['caption'];
+            $caption = Sanitizer::sanitizeCaption((string) $payload['caption'], 1024);
             $parseMode = $payload['parse_mode'] ?? null;
             if ($parseMode === 'HTML') {
                 $caption = htmlspecialchars($caption, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -46,6 +47,11 @@ class Telegram implements DispatcherInterface
 
             $imageUrl = $payload['image_url'] ?? null;
             if (!empty($imageUrl)) {
+                try {
+                    $imageUrl = Sanitizer::validateImageUrl($imageUrl);
+                } catch (\InvalidArgumentException $e) {
+                    throw new PlatformException('telegram', 422, $e->getMessage());
+                }
                 try {
                     $resp = $this->request(
                         $token,
