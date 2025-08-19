@@ -47,4 +47,7 @@ if (!$isBot) {
 
 header('Cache-Control: no-store');
 header('Location: ' . $link['target_url'], true, 302);
-exit;
+if (!defined('SAE_TESTING')) {
+    exit;
+}
+return;

@@ -13,15 +13,19 @@ class Db
     public static function instance(): PDO
     {
         if (self::$pdo === null) {
-            $driver  = Config::get('DB_CONNECTION', 'mysql');
-            $host    = Config::get('DB_HOST', '127.0.0.1');
-            $port    = Config::get('DB_PORT', '3306');
-            $dbname  = Config::get('DB_DATABASE', 'social_autopost_db');
-            $user    = Config::get('DB_USERNAME', 'root');
-            $pass    = Config::get('DB_PASSWORD', '');
+            $dsn  = Config::get('DB_DSN');
+            $user = Config::get('DB_USERNAME', '');
+            $pass = Config::get('DB_PASSWORD', '');
 
-            // DSN sesuai dengan .env
-            $dsn = "{$driver}:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
+            if (!$dsn) {
+                $driver = Config::get('DB_CONNECTION', 'mysql');
+                $host   = Config::get('DB_HOST', '127.0.0.1');
+                $port   = Config::get('DB_PORT', '3306');
+                $dbname = Config::get('DB_DATABASE', 'social_autopost_db');
+                $dsn    = "{$driver}:host={$host};port={$port};dbname={$dbname};charset=utf8mb4";
+                $user   = Config::get('DB_USERNAME', 'root');
+                $pass   = Config::get('DB_PASSWORD', '');
+            }
 
             try {
                 self::$pdo = new PDO($dsn, $user, $pass, [

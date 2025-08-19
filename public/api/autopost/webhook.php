@@ -23,7 +23,7 @@ if (!preg_match('/^sha256=([0-9a-fA-F]{64})$/', $signatureHeader, $m)) {
     return;
 }
 
-$raw = file_get_contents('php://input') ?: '';
+$raw = $GLOBALS['__SAE_WEBHOOK_BODY'] ?? file_get_contents('php://input') ?: '';
 $expected = hash_hmac('sha256', $raw, $secret);
 if (!hash_equals($expected, strtolower($m[1]))) {
     http_response_code(401);
