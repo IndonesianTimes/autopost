@@ -35,4 +35,9 @@ class Db
 
         return self::$pdo;
     }
+
+    public static function pdo(): PDO
+    {
+        return self::instance();
+    }
 }
