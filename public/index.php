@@ -13,7 +13,7 @@ if ($basePath && str_starts_with($uri, $basePath)) {
 $uri = rtrim($uri, '/') ?: '/';
 
 if ($method === 'GET' && $uri === '/health') {
-    json(200, ['ok' => true, 'php' => PHP_VERSION]);
+    require __DIR__ . '/health.php';
     return;
 }
 
