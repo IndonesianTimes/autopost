@@ -29,11 +29,29 @@ final class QueueControllerTest extends TestCase
         $prop->setValue(null, null);
 
         $pdo = Db::instance();
-        $pdo->exec('CREATE TABLE social_queue (id INTEGER PRIMARY KEY, title TEXT, channels TEXT, status TEXT, publish_at TEXT, retries INTEGER, updated_at TEXT)');
-        $pdo->exec('CREATE TABLE social_posts (id INTEGER PRIMARY KEY, queue_id INTEGER, platform TEXT, status TEXT, posted_at TEXT)');
+        $pdo->exec('CREATE TABLE social_queue (
+            id INTEGER PRIMARY KEY,
+            title TEXT,
+            channels TEXT,
+            status TEXT,
+            publish_at TEXT,
+            retry_count INTEGER DEFAULT 0,
+            last_attempt_at TEXT,
+            last_error_code TEXT,
+            last_error_message TEXT
+        )');
+        $pdo->exec('CREATE TABLE social_posts (
+            id INTEGER PRIMARY KEY,
+            queue_id INTEGER,
+            platform TEXT,
+            post_id TEXT,
+            raw_response TEXT,
+            posted_at TEXT
+        )');
 
-        $pdo->exec("INSERT INTO social_queue (id, title, channels, status, publish_at, retries, updated_at) VALUES (1, 'Title', 'fb', 'ready', '2024-01-01 00:00:00', 0, '2024-01-01 00:00:00')");
-        $pdo->exec("INSERT INTO social_posts (id, queue_id, platform, status, posted_at) VALUES (1, 1, 'fb', 'posted', '2024-01-01 01:00:00')");
+        $pdo->exec("INSERT INTO social_queue (id, title, channels, status, publish_at, retry_count) VALUES (1, 'Title1', 'fb', 'pending', '2024-01-01 00:00:00', 0)");
+        $pdo->exec("INSERT INTO social_queue (id, title, channels, status, publish_at, retry_count) VALUES (2, 'Title2', 'fb', 'posted', '2024-01-01 00:05:00', 0)");
+        $pdo->exec("INSERT INTO social_posts (id, queue_id, platform, post_id, raw_response, posted_at) VALUES (1, 2, 'fb', 'pid', '{}', '2024-01-01 01:00:00')");
     }
 
     protected function tearDown(): void
@@ -53,7 +71,7 @@ final class QueueControllerTest extends TestCase
         $this->assertSame('ok', $data['status']);
         $this->assertCount(1, $data['data']);
         $row = $data['data'][0];
-        $this->assertSame('Title', $row['title']);
+        $this->assertSame('Title1', $row['title']);
         $this->assertSame('pending', $row['status']);
     }
 
@@ -67,7 +85,7 @@ final class QueueControllerTest extends TestCase
         $this->assertSame('ok', $data['status']);
         $this->assertCount(1, $data['data']);
         $row = $data['data'][0];
-        $this->assertSame('Title', $row['title']);
+        $this->assertSame('Title2', $row['title']);
         $this->assertSame('posted', $row['status']);
     }
 }

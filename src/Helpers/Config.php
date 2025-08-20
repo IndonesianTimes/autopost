@@ -9,19 +9,24 @@ class Config
 {
     private static bool $loaded = false;
 
-    private static function ensureLoaded(): void
+    public static function load(string $basePath): void
     {
-        if (self::$loaded) return;
-
-        // root project: .../src/Helpers => naik 2 level
-        $basePath = dirname(__DIR__, 2);
-        $envFile  = $basePath . '/.env';
-
+        if (self::$loaded) {
+            return;
+        }
+        $envFile = rtrim($basePath, '/') . '/.env';
         if (is_file($envFile)) {
             $dotenv = Dotenv::createImmutable($basePath);
             $dotenv->load();
         }
         self::$loaded = true;
+    }
+
+    private static function ensureLoaded(): void
+    {
+        if (!self::$loaded) {
+            self::load(dirname(__DIR__, 2));
+        }
     }
 
     public static function get(string $key, mixed $default = null): mixed

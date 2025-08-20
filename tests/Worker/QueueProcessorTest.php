@@ -41,7 +41,7 @@ final class QueueProcessorTest extends TestCase
         $processor = new QueueProcessor();
         $method = new ReflectionMethod($processor, 'scheduleRetry');
         $method->setAccessible(true);
-        $method->invoke($processor, ['id' => 1, 'retry_count' => 0]);
+        $method->invoke($processor, ['id' => 1, 'retry_count' => 0], $now);
 
         $row = $this->pdo->query('SELECT status, retry_count, publish_at FROM social_queue WHERE id=1')->fetch();
         $this->assertSame('retry', $row['status']);
@@ -62,7 +62,7 @@ final class QueueProcessorTest extends TestCase
         $processor = new QueueProcessor();
         $method = new ReflectionMethod($processor, 'scheduleRetry');
         $method->setAccessible(true);
-        $method->invoke($processor, ['id' => 2, 'retry_count' => 3]);
+        $method->invoke($processor, ['id' => 2, 'retry_count' => 3], $now);
 
         $row = $this->pdo->query('SELECT status, retry_count FROM social_queue WHERE id=2')->fetch();
         $this->assertSame('failed', $row['status']);
