@@ -11,7 +11,7 @@ header('Cache-Control: no-store');
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     http_response_code(405);
-    echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
+    echo json_encode(['ok' => false, 'error' => 'method_not_allowed'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return;
 }
 
@@ -19,7 +19,7 @@ $secret = Config::require('SAE_WEBHOOK_SECRET');
 $signatureHeader = $_SERVER['HTTP_X_SIGNATURE'] ?? '';
 if (!preg_match('/^sha256=([0-9a-fA-F]{64})$/', $signatureHeader, $m)) {
     http_response_code(401);
-    echo json_encode(['ok' => false, 'error' => 'invalid_signature']);
+    echo json_encode(['ok' => false, 'error' => 'invalid_signature'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return;
 }
 
@@ -27,14 +27,14 @@ $raw = $GLOBALS['__SAE_WEBHOOK_BODY'] ?? file_get_contents('php://input') ?: '';
 $expected = hash_hmac('sha256', $raw, $secret);
 if (!hash_equals($expected, strtolower($m[1]))) {
     http_response_code(401);
-    echo json_encode(['ok' => false, 'error' => 'invalid_signature']);
+    echo json_encode(['ok' => false, 'error' => 'invalid_signature'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return;
 }
 
 $data = json_decode($raw, true);
 if (!is_array($data)) {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'invalid_json']);
+    echo json_encode(['ok' => false, 'error' => 'invalid_json'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return;
 }
 
@@ -42,7 +42,7 @@ $source = isset($data['source']) && is_string($data['source']) && $data['source'
 $eventId = isset($data['event_id']) && is_string($data['event_id']) && $data['event_id'] !== '' ? $data['event_id'] : '';
 if ($eventId === '') {
     http_response_code(400);
-    echo json_encode(['ok' => false, 'error' => 'missing_event_id']);
+    echo json_encode(['ok' => false, 'error' => 'missing_event_id'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     return;
 }
 
@@ -105,7 +105,7 @@ try {
     $pdo->commit();
 
     http_response_code(202);
-    echo json_encode(['ok' => true, 'queue_id' => $queueId]);
+    echo json_encode(['ok' => true, 'queue_id' => $queueId], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } catch (PDOException $e) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
@@ -113,9 +113,9 @@ try {
 
     if ($e->getCode() === '23000') {
         http_response_code(202);
-        echo json_encode(['ok' => true, 'dedup' => true]);
+        echo json_encode(['ok' => true, 'dedup' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     } else {
         http_response_code(500);
-        echo json_encode(['ok' => false, 'error' => 'db_error']);
+        echo json_encode(['ok' => false, 'error' => 'db_error'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 }

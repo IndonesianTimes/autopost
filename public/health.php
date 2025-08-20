@@ -34,4 +34,4 @@ echo json_encode([
     'ok' => $ok,
     'time' => $now,
     'tokens' => $tokens,
-]);
+], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

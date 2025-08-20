@@ -26,7 +26,7 @@ class Logger
     {
         try {
             $db = self::db();
-            $json = json_encode($raw, JSON_UNESCAPED_UNICODE);
+            $json = json_encode($raw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $stmt = $db->prepare('INSERT INTO social_posts (queue_id, platform, post_id, raw_response, posted_at) VALUES (:qid,:pf,:pid,:resp,NOW())');
             $stmt->execute([
                 ':qid' => $queueId,
@@ -46,7 +46,7 @@ class Logger
     {
         try {
             $db = self::db();
-            $json = json_encode($responseRaw, JSON_UNESCAPED_UNICODE);
+            $json = json_encode($responseRaw, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $stmt = $db->prepare('INSERT INTO webhooks_log (queue_id, platform, response_code, error_message, response_body) VALUES (:qid,:pf,:code,:msg,:resp)');
             $stmt->execute([
                 ':qid' => $queueId,
