@@ -1,0 +1,43 @@
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+$pdo = App\Helpers\Db::pdo();
+$driver = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+$pdo->exec('CREATE TABLE IF NOT EXISTS schema_migrations (filename VARCHAR(255) PRIMARY KEY)');
+$applied = $pdo->query('SELECT filename FROM schema_migrations')->fetchAll(PDO::FETCH_COLUMN) ?: [];
+$dir = __DIR__ . '/../migrations';
+$files = glob($dir . '/*.{sql,php}', GLOB_BRACE);
+sort($files);
+$logFile = __DIR__ . '/../storage/migrate.log';
+foreach ($files as $file) {
+    $base = basename($file);
+    if (in_array($base, $applied, true)) {
+        continue;
+    }
+    try {
+        if (str_ends_with($file, '.sql')) {
+            if ($driver === 'sqlite') {
+                continue;
+            }
+            $sql = file_get_contents($file);
+            if ($sql !== false) {
+                $pdo->exec($sql);
+            }
+        } else {
+            require $file;
+        }
+        $stmt = $pdo->prepare('INSERT INTO schema_migrations (filename) VALUES (:f)');
+        $stmt->execute([':f' => $base]);
+        $line = date('c') . " migrated {$base}\n";
+        file_put_contents($logFile, $line, FILE_APPEND);
+        echo $line;
+    } catch (Throwable $e) {
+        $line = date('c') . " failed {$base}: " . $e->getMessage() . "\n";
+        file_put_contents($logFile, $line, FILE_APPEND);
+        fwrite(STDERR, $line);
+        exit(1);
+    }
+}

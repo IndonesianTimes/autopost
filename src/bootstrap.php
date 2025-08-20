@@ -14,12 +14,19 @@ function db(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
-        $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=utf8mb4',
-            $_ENV['DB_HOST'] ?? 'localhost',
-            $_ENV['DB_NAME'] ?? ''
-        );
-        $pdo = new PDO($dsn, $_ENV['DB_USER'] ?? '', $_ENV['DB_PASS'] ?? '', [
+        $dsn  = $_ENV['DB_DSN'] ?? null;
+        $user = $_ENV['DB_USER'] ?? '';
+        $pass = $_ENV['DB_PASS'] ?? '';
+        if (!$dsn) {
+            $dsn = sprintf(
+                'mysql:host=%s;dbname=%s;charset=utf8mb4',
+                $_ENV['DB_HOST'] ?? 'localhost',
+                $_ENV['DB_NAME'] ?? ''
+            );
+            $user = $_ENV['DB_USER'] ?? '';
+            $pass = $_ENV['DB_PASS'] ?? '';
+        }
+        $pdo = new PDO($dsn, $user, $pass, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
