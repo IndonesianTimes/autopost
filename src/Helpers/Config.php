@@ -45,4 +45,10 @@ class Config
         if (is_bool($value)) return $value;
         return filter_var((string) $value, FILTER_VALIDATE_BOOLEAN);
     }
+
+    public static function load(): void
+    {
+        // Alias supaya kode lama yang memanggil Config::load() tetap jalan
+        self::ensureLoaded();
+    }
 }
