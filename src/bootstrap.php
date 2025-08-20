@@ -38,10 +38,11 @@ function json(int $status, $payload): void
 {
     http_response_code($status);
     header('Content-Type: application/json');
+    $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
     if ($status >= 400) {
-        echo json_encode(['status' => 'error', 'error' => $payload], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['status' => 'error', 'error' => $payload], $flags);
     } else {
-        echo json_encode(['status' => 'ok', 'data' => $payload], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['status' => 'ok', 'data' => $payload], $flags);
     }
 }
 
